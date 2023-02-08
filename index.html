@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<script type="text/javascript" src="http://map.vworld.kr/js/webglMapInit.js.do?version=2.0&apiKey=B670B17B-DAFA-3FDD-A25E-4E7E1BE34C3A&domain=localhost"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+<body>
+<div id="vmap" style="width:100%;height:100vh;"></div>
+<div class="search-wrap">
+    <div class="search-icon-wrap" onclick="showSearch()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+    </div>
+
+    <div class="search-input-wrap">
+        <input class="search-input" name="query"/>
+
+        <svg class="search-button" onclick="onSearch()" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.5"
+             stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+    </div>
+</div>
+</body>
+
+<style>
+    .search-wrap {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .search-icon-wrap {
+        width: 40px;
+        height: 40px;
+        background-color: #fff;
+        border-radius: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+    }
+
+    .search-input-wrap {
+        background-color: #fff;
+        display: none;
+        align-items: center;
+        border-radius: 2px;
+        padding: 6px;
+        gap: 5px;
+        width: 300px;
+    }
+
+    .search-input {
+        padding: 6px;
+        border: 0;
+        border-bottom: 1px solid #ddd;
+        flex: 1;
+    }
+
+    .search-button {
+        cursor: pointer;
+    }
+</style>
+
+<script>
+    let map;
+
+    const showSearch = () => {
+        document.querySelector('.search-input-wrap').style.display = (document.querySelector('.search-input-wrap').style.display === 'flex') ? 'none' : 'flex'
+    }
+
+    const onSearch = () => {
+        search();
+    }
+
+    const vwmap = () => {
+        const mapOptions = new vw.MapOptions(
+            vw.BasemapType.GRAPHIC,
+            "",
+            eval("vw.DensityType.BASIC"),
+            eval("vw.DensityType.BASIC"),
+            false,
+            new vw.CameraPosition(
+                new vw.CoordZ(127.425, 38.196, 13487000),
+                new vw.Direction(-90, 0, 0)
+            ),
+            new vw.CameraPosition(
+                new vw.CoordZ(127.425, 38.196, 1548700),
+                new vw.Direction(0, -90, 0)
+            )
+        );
+
+        map = new vw.Map("vmap", mapOptions);
+    }
+
+    vwmap();
+
+    let search = function () {
+        $.ajax({
+            type: "get",
+            url: `https://api.vworld.kr/req/search?key=B670B17B-DAFA-3FDD-A25E-4E7E1BE34C3A&request=search&type=PLACE&query=${$('.search-input').val()}`,
+            dataType: 'jsonp', //cors 우회를 위해 jsonp 이용
+            async: false,
+            beforeSend: map.clear(),
+            success: function (data) {
+                if (data.response.status == "NOT_FOUND") {
+                    alert("검색결과가 없습니다.");
+                } else {
+                    console.log(data);
+                    for (let o in data.response.result.items) {
+                        let mx = data.response.result.items[o].point.x;
+                        let my = data.response.result.items[o].point.y;
+                        if (o == 0) {
+                            //첫번째인자로 이동
+                            move(mx, my, 500);
+                        }
+                        pt = new vw.geom.Point(new vw.Coord(mx, my));
+                        pt.setImage("https://map.vworld.kr/images/op02/map_point.png");
+                        pt.setName(data.response.result.items[o].title);
+                        pt.setFont("고딕");
+                        pt.setId("id_" + o)
+                        pt.setFontSize(14);
+                        pt.set("parcel", data.response.result.items[o].address.parcel)
+                        pt.set("road", data.response.result.items[o].address.road)
+
+                        pt.create();
+
+
+                        // 이벤트 처리 함수이며, 파라미터로 클릭시 window 픽셀, ecef좌표, cartographic좌표(실제경위도), 객체정보를 인수로 받는다.
+                        var eventHandler = function (windowPosition, ecefPosition, cartographic, featureInfo) {
+
+                            //console.log("property :" , windowPosition, ecefPosition, cartographic, featureInfo);
+                            if (featureInfo != null) {
+                                // featureInfo 와 Point객체와는 다름.
+                                var id = featureInfo.groupId;
+                                var pointObj = map.getObjectById(id);
+                                //console.log("pointObj :" , pointObj);
+                                var road = map.getObjectById(featureInfo.groupId).get("road");
+                                var parcel = map.getObjectById(featureInfo.groupId).get("parcel")
+                                // 텍스트문구(HTML)
+                                var html = `road : ${road}\n parcel : ${parcel}`;
+
+                                // 제목 title
+                                var title = pointObj.getName();
+                                //_id, _container, _title, _html, _width, _height, _x, _y
+                                // 식별아이디, 탑재컨테이너, 제목, html, 레이어가로길이, 레이어세로길이, 클릭 이벤트X, 클릭 이벤트Y
+                                pop = new vw.Popup("pop01", "vmap", title, html, 150, 100, windowPosition.x, windowPosition.y);
+                                pop.create();
+                            }
+                        }
+                        pt.addEventListener(eventHandler);
+                    }
+                }//else 종료
+            },
+            complete: function () {
+
+
+            },
+            error: function (xhr, stat, err) {
+            }
+        });
+    }
+    /** 이동함수 구현
+     */
+    let move = function (x, y, z) {
+        var movePo = new vw.CoordZ(x, y, z);
+        var mPosi = new vw.CameraPosition(movePo, new vw.Direction(0, -90, 0));
+        map.moveTo(mPosi);
+    }
+</script>
+</html>
